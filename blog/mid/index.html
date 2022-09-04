@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+	<script src="https://kit.fontawesome.com/1a9f4528be.js" crossorigin="anonymous"></script>
+</head>
+<body>
+<style>
+	body {
+		background-color: #06a0c7;
+		color: white;
+		font-family: "Segoe UI", sans-serif;
+		width: 80%;
+    	margin: auto;
+	}
+	a, a:link {
+		color: yellow !important;
+	}
+	a:hover {
+		text-decoration: underline;
+	}
+	p.title {
+		text-align: center;
+		margin: 50px 0;
+		font-size: 3em;
+    	font-weight: bold;
+	}
+	.btn-blog {
+		background-color: white;
+		color: #06a0c7;
+		margin: auto;
+	}
+	.btn-blog:hover {
+		background-color: black;
+		color: white;
+	}
+
+</style>
+<p class="title">Middlewares in ASP.NET Core</p>
+
+<h2>What is it?</h2>
+<p>Quick note: For this article, it would help to think in a framework that promotes the Request-Response pair. That is such a natural thing to do when you've been in web for a while, but nevertheless, trust me - it will help.
+
+So .NET Core comes with this extra capability to interfere in the pipeline for processing the incoming requests, and add your own custom logic that is injected at whatever level you want in the whole process. Up until .NET Core "unleashed" this capability, what ASP.NET was doing with the requests that came to our apps was more of a blackbox. We, as programmers, could carry ourselves in our jobs without caring that much about it and still be able to keep on developing our apps. As long as the Requests were formed correctly and they "hit" the right targets (be they pages, controllers, actions and so on), our apps can be labeled as "successful".
+
+What this amazing ability brought us is the power to add behavior right before the request would reach the designated target. It can be helpful to add your own custom checks earlier, before the request gets to the serving component. This can be used also as a request filter, if within the decisions written in a specific middleware, you also add conditions for exclusion, in case a specific request has some problematic content in it.
+
+Mind that there is a default order in which all steps are being executed, in the request processing pipeline. You can intervene only within a dedicated space with custom middlewares, but the path is pretty well pre-determined with pre-existing middlewares. This picture taken from MS Docs should portrait things a bit better - see the "Custom Middlewares" box as a guideline for where you can intervene.</p>
+<p>When defining your own middlewares, you can set the order in which they will be executed by setting this up in the Startup file, specifically in the Configure method. The usual pattern used is app.UseMyMiddlewareNameHere();. When creating a new .NET Core application, it is very likely that some middlewares have been added to your app by default, because they are being used very often. In this Startup file you will be able to see all these. The order in which they will be executed is the order of the lines of code where they are declared. For example, two frequent middlewares used are: UseStaticFiles(), for mentioning that for static files (css/js), there is no need to go through all the steps, and you can serve them directly when user requests them. Also, a frequently used middleware would be UseRouting(), for using custom routes in our app. The whole execution of these can be seen as a chain of calls, each step starting after the one before it does finish.</p>
+<img src="https://docs.microsoft.com/en-us/aspnet/core/fundamentals/middleware/index/_static/middleware-pipeline.svg?view=aspnetcore-5.0" width="80%">
+<p>(Image taken from <a href="https://docs.microsoft.com/en-us/aspnet/core/fundamentals/middleware/?view=aspnetcore-5.0">Microsoft's</a> Middleware docs page. I actually recommend a visit there, while you're here curious about Middlewares)</p>
+<h2>What is already available?</h2>
+<p>Fortunately, .NET Core has developed through time more useful middlewares, all ready for being used according to your needs. They span around domains like: Authentication, Authorization, Cookie policy, CORS, Health Check, HTTPS redirection, Session and so on. For the whole list with full details, see the <a href="https://docs.microsoft.com/en-us/aspnet/core/fundamentals/middleware/?view=aspnetcore-5.0">docs</a> page.</p>
+<h2>How can I build my own?</h2>
+<p>There are at least two ways. Let's start with the shortest, simplest one. You could add a piece of code right in Startup file, in the Configure method. Calling app.Use and passing through a method with the desired behavior. What is important - at the end of the method, you should signal that the next element on the pipeline chain should be executed. You will often see this through a call similar to: await _next();. It is important to do this, to let the next middlewares take the request further into the pipeline, up until the end.
+
+The second way to create a middleware requires a bit more code, but it is more recommended for a well organised code structure. It consists of a simple idea - just take the same code from solution 1 above, and move it in a separate class. See a good parallel between these 2 approaches. The example here illustrates a start with option 1 - to simply put the code right into the Configure method. Then it moves same functionality to a separate class. With the class approach, we need to keep account of 2 facts - first, we need a public constructor that will have a parameter of type RequestDelegate, aiming to set that value to a class field of same type, conventionally called something around _next. Second, the class approach will need to contain a method called Invoke or InvokeAsync, returning the type Task and accepting a first parameter of type HttpContext. Generally, the Invoke method would end with a call to invoke next link on the pipeline chain, something in the lines of: _next(context).</p>
+
+<h2>How to use it?</h2>
+<p>For adding your own middleware into the pipeline, simply return to the Configure method from the Startup file. There, on the IApplicationBuilder object, it is enough to add a call to .UseMiddleware, passing through the angular braces the type of the desired middleware. For example: app.UseMiddleware<MyCustomMiddlewareType>();. By now I hope you can see the advantage of taking the custom class approach - the "Configure" method becomes more clean and simple, this way. Instead of filling it with on-the-spot declared middlewares, with the class approach, the decision to use 1 middleware would only take one line of code. That's it. One per each middleware.</p>
+
+<h2>My motivation</h2>
+<p>I discovered middlewares while working on a custom CRM that aggregates big volumes of data - in my team, we compiled data from 3+ departments. In this context, we need to be able to trace back any error and see where exactly a request gets stuck. Departmens had each their own rules for exposing their data. Sometimes, requests passed through more than 3 departments before returning a response. By the help of middlewares, we came up with a solution to add a custom header in all the requests/responses along this chain - a new, custom value. We called it "CorrelationId" (Guid values), and we all agreed to set it on any incoming request in our departments, if not already existing. This way, a unique ID is set only on the first step of a road, then it is carried along nicely in the headers, until the end. This solution does not affect apps in any way. We made the IDs visible only in logs. And in case of error, we can text-search in logs by the Guid of the problematic request. This offered us better visibility and the opportunity for more targeted solutions. Thanks custom Middlewares, for enabling us to do fine-detail request tracing. It might be a very nice solution for the microservices scenarios, too.</p>
+</body>
+
+</html>
